@@ -88,10 +88,22 @@ public final class Host {
     private Host() {}
 
     public static void main(String[] args) throws IOException {
-        out = new PrintStream(new FileOutputStream(FileDescriptor.out), false, StandardCharsets.UTF_8);
+        // Inside the game's process (Android) there is no child's stdin and stdout: the game gives the pipes' paths
+        // (kiln.in, kiln.out) and where the mods' output goes (kiln.err); as a child process, the usual ones.
+        String err = System.getProperty("kiln.err");
+        if (err != null) {
+            System.setErr(new PrintStream(new FileOutputStream(err), true, StandardCharsets.UTF_8));
+        }
+        String outPath = System.getProperty("kiln.out");
+        out = new PrintStream(
+                outPath != null ? new FileOutputStream(outPath) : new FileOutputStream(FileDescriptor.out),
+                false,
+                StandardCharsets.UTF_8);
         System.setOut(System.err);
         send("ready", Loader.javaVersion());
-        in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        String inPath = System.getProperty("kiln.in");
+        in = new BufferedReader(new InputStreamReader(
+                inPath != null ? new java.io.FileInputStream(inPath) : System.in, StandardCharsets.UTF_8));
         for (String line; (line = next()) != null; ) {
             if (line.startsWith("tick\t")) {
                 // The mods are loaded and the game ticks: the rest is the client's main loop, Minecraft.run, as the

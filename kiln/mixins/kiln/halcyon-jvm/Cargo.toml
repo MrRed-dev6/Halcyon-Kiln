@@ -1,0 +1,9 @@
+[package]
+name = "halcyon-jvm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Runs Kiln's JVM inside the game process on Android (a bionic JRE, as Zalith and Pojav do)."
+
+[dependencies]
+libloading = "0.8.9"

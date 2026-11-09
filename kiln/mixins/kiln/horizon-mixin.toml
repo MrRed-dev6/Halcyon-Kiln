@@ -495,3 +495,8 @@ kind = "HEAD"
 target = "horizon_client::game::world_loading::level_shapes"
 helper = "world_packs.rs"
 bindings = []
+
+# Java inside the game's process on Android (a separate crate: the game's own forbids unsafe code).
+[[crate]]
+id = "halcyon-jvm"
+path = "halcyon-jvm"

@@ -415,7 +415,8 @@ fn queue(commands: &SyncSender<String>, line: String) -> Result<(), String> {
 /// The Java process, the queue its writer thread takes commands from, the replies its reader thread has
 /// collected, and the server's link until the game takes it.
 pub struct JavaHost {
-    child: Child,
+    /// The Java process, when Java isn't running inside the game (`halcyon_jvm`).
+    child: Option<Child>,
     commands: SyncSender<String>,
     replies: Receiver<Reply>,
     server: Option<ServerLink>,
@@ -537,29 +538,58 @@ impl JavaHost {
         {
             agent.push(runtime);
         }
-        let mut command = Command::new(java_program(home));
-        if agent.len() > "-javaagent:".len() {
-            command.arg(agent);
-        }
-        // In Kiln's folder, as vanilla runs in the game folder: a mod's relative `config/` is FabricLoader's.
-        let mut child = command
-            .current_dir(dir)
-            .arg("-Xmx512m")
-            // JOML (the mods' HUD poses) without sun.misc.Unsafe, which Java 25 warns about in the log.
-            .arg("-Djoml.nounsafe=true")
-            // The game's prepared resources (its language files, its assets), for the mods' text and resources.
-            .arg(resources_property())
-            .arg(kiln_dir)
-            .arg("-cp")
-            .arg(joined)
-            .arg("kiln.Host")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(log)
-            .spawn()
-            .map_err(|e| format!("can't run {}: {e}", java_program(home).display()))?;
-        let mut stdin = child.stdin.take().ok_or("no stdin for Java")?;
-        let stdout = child.stdout.take().ok_or("no stdout for Java")?;
+        // Java inside the game's own process (Android, which kills a child process before the app), or as the child
+        // process everywhere else: either way, commands go to its stdin and replies come from its stdout.
+        let (mut stdin, stdout, child): (
+            Box<dyn std::io::Write + Send>,
+            Box<dyn std::io::Read + Send>,
+            Option<Child>,
+        ) = if halcyon_jvm::wanted() {
+            let mut options: Vec<OsString> = Vec::new();
+            if agent.len() > "-javaagent:".len() {
+                options.push(agent.clone());
+            }
+            options.push("-Xmx512m".into());
+            // One collector thread and no parallel heap: this is a phone's memory.
+            options.push("-XX:+UseSerialGC".into());
+            options.push("-Djoml.nounsafe=true".into());
+            options.push(resources_property());
+            options.push(kiln_dir.clone());
+            let embedded = halcyon_jvm::start(halcyon_jvm::Launch {
+                home: home.to_path_buf(),
+                options,
+                class_path: joined.clone(),
+                main_class: "kiln.Host".into(),
+                dir: dir.clone(),
+                log: log_file.clone(),
+            })?;
+            (embedded.stdin, embedded.stdout, None)
+        } else {
+            let mut command = Command::new(java_program(home));
+            if agent.len() > "-javaagent:".len() {
+                command.arg(agent);
+            }
+            // In Kiln's folder, as vanilla runs in the game folder: a mod's relative `config/` is FabricLoader's.
+            let mut child = command
+                .current_dir(dir)
+                .arg("-Xmx512m")
+                // JOML (the mods' HUD poses) without sun.misc.Unsafe, which Java 25 warns about in the log.
+                .arg("-Djoml.nounsafe=true")
+                // The game's prepared resources (its language files, its assets), for the mods' text and resources.
+                .arg(resources_property())
+                .arg(kiln_dir)
+                .arg("-cp")
+                .arg(joined)
+                .arg("kiln.Host")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(log)
+                .spawn()
+                .map_err(|e| format!("can't run {}: {e}", java_program(home).display()))?;
+            let stdin = child.stdin.take().ok_or("no stdin for Java")?;
+            let stdout = child.stdout.take().ok_or("no stdout for Java")?;
+            (Box::new(stdin), Box::new(stdout), Some(child))
+        };
         let (commands, queue) = sync_channel::<String>(QUEUE);
         // Ends when Java stops reading (its stdin breaks) or the game drops the JavaHost.
         std::thread::Builder::new()
@@ -634,8 +664,10 @@ impl JavaHost {
 
 impl Drop for JavaHost {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Some(child) = &mut self.child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
