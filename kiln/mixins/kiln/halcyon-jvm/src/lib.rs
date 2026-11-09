@@ -130,11 +130,16 @@ fn run_jli(home: &Path, lib: &Path, argv: &[CString]) -> Result<c_int, String> {
     unsafe {
         // The signal chaining library first, before libjvm: HotSpot's SIGSEGV (implicit null checks) and
         // Android's handlers then chain (Zalith loads it the same way).
-        let jsig = lib.join("server").join("libjsig.so");
-        let _jsig = if jsig.is_file() {
-            Some(Library::open(Some(&jsig), RTLD_NOW | RTLD_GLOBAL).map_err(|e| e.to_string())?)
-        } else {
-            None
+        // OpenJDK 9+ keeps it in lib/; older layouts (and some Android builds) in lib/server/.
+        let jsig = [lib.join("libjsig.so"), lib.join("server").join("libjsig.so")]
+            .into_iter()
+            .find(|p| p.is_file());
+        let _jsig = match jsig {
+            Some(jsig) => Some(
+                Library::open(Some(&jsig), RTLD_NOW | RTLD_GLOBAL)
+                    .map_err(|e| format!("libjsig.so: {e}"))?,
+            ),
+            None => None,
         };
         let jli = Library::open(Some(lib.join("libjli.so")), RTLD_NOW | RTLD_GLOBAL)
             .map_err(|e| format!("libjli.so: {e}"))?;
