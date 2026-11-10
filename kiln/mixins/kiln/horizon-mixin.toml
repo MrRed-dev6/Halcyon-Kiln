@@ -46,6 +46,13 @@ file = "crates/horizon-client/src/game.rs"
 name = "kiln_loot"
 source = "loot.rs"
 
+[[module]]
+id = "quads"
+file = "crates/horizon-client-render/src/lib.rs"
+name = "kiln_quads"
+source = "kiln_quads.rs"
+visibility = "pub"
+
 [[injection]]
 id = "tick"
 kind = "HEAD"
@@ -500,3 +507,18 @@ bindings = []
 [[crate]]
 id = "halcyon-jvm"
 path = "halcyon-jvm"
+
+# Weather Glass and others: quads a Java mod added to a block's face, drawn after the face as an overlay is.
+[[injection]]
+id = "mesher-quads"
+kind = "RETURN"
+target = "horizon_client_render::mesher::Mesher::face"
+helper = "mesher_quads.rs"
+bindings = [
+  { name = "mesher", ty = "&Mesher<'_>", value = "self" },
+  { name = "pad", ty = "&Padded", value = "pad" },
+  { name = "out", ty = "&mut SectionMesh", value = "out" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "origin", ty = "[f32; 3]", value = "origin" },
+  { name = "face", ty = "&BakedFace", value = "face" },
+]
