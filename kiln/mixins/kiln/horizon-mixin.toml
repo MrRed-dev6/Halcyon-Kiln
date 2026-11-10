@@ -508,10 +508,11 @@ bindings = []
 id = "halcyon-jvm"
 path = "halcyon-jvm"
 
-# Weather Glass and others: quads a Java mod added to a block's face, drawn after the face as an overlay is.
+# Weather Glass and others: quads a Java mod added to a block's face, drawn with the face (HEAD: horizon-mixins
+# resolves a lifetime-bearing impl's method, `impl Mesher<'_>`, for HEAD only).
 [[injection]]
 id = "mesher-quads"
-kind = "RETURN"
+kind = "HEAD"
 target = "horizon_client_render::mesher::Mesher::face"
 helper = "mesher_quads.rs"
 bindings = [

@@ -1,4 +1,4 @@
-// The end of `Mesher::face`: the extra quads Java mods gave this face, drawn after it as an overlay is.
+// The start of `Mesher::face`: the extra quads Java mods gave this face, drawn with it as an overlay is.
 fn kiln_extra_quads(
     mesher: &Mesher<'_>,
     pad: &Padded,
